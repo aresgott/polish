@@ -1,0 +1,50 @@
+{
+  "name": "@aresgott/polish",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "1.0.0",
+  "description": "Polish — fix grammar, set tone, copy to clipboard (ChatGPT or Claude)",
+  "type": "module",
+  "bin": {
+    "polish": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    ".npmrc",
+    "logo.png",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "cli",
+    "grammar",
+    "chatgpt",
+    "writing"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.79",
+    "@clack/prompts": "^1.4.0",
+    "@openai/codex": "^0.132.0",
+    "ai": "^6.0.116",
+    "clipboardy": "^4.0.0",
+    "diff": "^9.0.0",
+    "openai-oauth-provider": "^1.0.3"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/claude-code": "^2.1.150"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  }
+}

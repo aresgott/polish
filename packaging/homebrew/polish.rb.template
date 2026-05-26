@@ -1,0 +1,21 @@
+class Polish < Formula
+  desc "Fix grammar and tone with ChatGPT or Claude, copy to clipboard"
+  homepage "https://github.com/aresgott/polish"
+  url "{{URL}}"
+  sha256 "{{SHA256}}"
+  license "MIT"
+  head "https://github.com/aresgott/polish.git", branch: "master"
+
+  depends_on "node@20"
+
+  def install
+    system "npm", "ci", "--ignore-scripts"
+    system "npm", "run", "build"
+    libexec.install "dist", "node_modules", "package.json", ".npmrc"
+    bin.install_symlink libexec/"dist/cli.js" => "polish"
+  end
+
+  test do
+    assert_equal "{{VERSION}}", shell_output("#{bin}/polish --version").strip
+  end
+end

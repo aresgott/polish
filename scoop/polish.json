@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "description": "Fix grammar, set tone, copy to clipboard — powered by ChatGPT or Claude",
+  "homepage": "https://github.com/aresgott/polish",
+  "license": "MIT",
+  "depends": "nodejs",
+  "notes": "Installs @aresgott/polish from npm (falls back to GitHub if npm is unavailable).",
+  "installer": {
+    "script": [
+      "$pkg = '@aresgott/polish'",
+      "$onNpm = (npm view $pkg version 2>$null)",
+      "if ($onNpm) { npm install -g $pkg --quiet } else { npm install -g github:aresgott/polish --quiet }"
+    ]
+  },
+  "uninstaller": {
+    "script": "npm uninstall -g @aresgott/polish"
+  },
+  "checkver": {
+    "url": "https://registry.npmjs.org/@aresgott%2Fpolish/latest",
+    "jsonpath": "$.version"
+  },
+  "autoupdate": {
+    "note": "Run: npm update -g @aresgott/polish"
+  }
+}

@@ -1,0 +1,180 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+      update_homebrew_only:
+        description: "Update Homebrew only (skip Scoop manifest)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: >-
+    ${{
+      github.event_name == 'workflow_dispatch' && github.event.inputs.version
+      || github.event_name == 'release' && github.event.release.tag_name
+      || github.ref_name
+    }}
+
+jobs:
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+  homebrew-formula:
+    needs: release
+    if: ${{ always() && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check tap credentials
+        id: tap_creds
+        env:
+          HOMEBREW_DEPLOY_KEY: ${{ secrets.HOMEBREW_DEPLOY_KEY }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -n "${HOMEBREW_DEPLOY_KEY}" ]; then
+            echo "auth=deploy_key" >> "$GITHUB_OUTPUT"
+            echo "Using HOMEBREW_DEPLOY_KEY (SSH deploy key)."
+            exit 0
+          fi
+          if [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "::error::Set HOMEBREW_DEPLOY_KEY (recommended) or HOMEBREW_TAP_TOKEN on aresgott/polish."
+            exit 1
+          fi
+          perms=$(curl -sf -H "Authorization: Bearer ${HOMEBREW_TAP_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/aresgott/homebrew-polish" | jq -r '.permissions.push // false')
+          if [ "$perms" != "true" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN cannot push to homebrew-polish. Use a deploy key instead (see packaging/README.md)."
+            exit 1
+          fi
+          echo "auth=token" >> "$GITHUB_OUTPUT"
+          echo "Using HOMEBREW_TAP_TOKEN."
+
+      - uses: actions/checkout@v4
+        with:
+          path: polish
+          ref: master
+          persist-credentials: false
+
+      - name: Checkout homebrew-polish (deploy key)
+        if: steps.tap_creds.outputs.auth == 'deploy_key'
+        uses: actions/checkout@v4
+        with:
+          repository: aresgott/homebrew-polish
+          ssh-key: ${{ secrets.HOMEBREW_DEPLOY_KEY }}
+          path: homebrew-polish
+          persist-credentials: false
+
+      - name: Checkout homebrew-polish (PAT)
+        if: steps.tap_creds.outputs.auth == 'token'
+        uses: actions/checkout@v4
+        with:
+          repository: aresgott/homebrew-polish
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-polish
+          persist-credentials: false
+
+      - name: Update Homebrew formula
+        env:
+          VERSION: ${{ env.RELEASE_TAG }}
+          FORMULA_PATH: homebrew-polish/Formula/polish.rb
+        run: |
+          chmod +x polish/packaging/homebrew/update-formula.sh
+          polish/packaging/homebrew/update-formula.sh "${VERSION#v}"
+
+      - name: Commit and push formula (deploy key)
+        if: steps.tap_creds.outputs.auth == 'deploy_key'
+        working-directory: homebrew-polish
+        env:
+          HOMEBREW_DEPLOY_KEY: ${{ secrets.HOMEBREW_DEPLOY_KEY }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/polish.rb
+          if git diff --staged --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git commit -m "chore(formula): update for ${RELEASE_TAG}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$HOMEBREW_DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+          GIT_SSH_COMMAND='ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes' \
+            git push git@github.com:aresgott/homebrew-polish.git HEAD:master
+
+      - name: Commit and push formula (PAT)
+        if: steps.tap_creds.outputs.auth == 'token'
+        working-directory: homebrew-polish
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/polish.rb
+          if git diff --staged --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git commit -m "chore(formula): update for ${RELEASE_TAG}"
+          git push "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/aresgott/homebrew-polish.git" HEAD:master
+
+  scoop-manifest:
+    needs: release
+    if: >-
+      ${{
+        always()
+        && (needs.release.result == 'success' || needs.release.result == 'skipped')
+        && github.event.inputs.update_homebrew_only != 'true'
+      }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump Scoop manifest version
+        env:
+          VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          chmod +x packaging/scoop/bump-version.sh
+          packaging/scoop/bump-version.sh "${VERSION#v}" packaging/scoop/polish.json
+          packaging/scoop/bump-version.sh "${VERSION#v}" scoop/polish.json
+
+      - name: Commit and push manifest
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packaging/scoop/polish.json scoop/polish.json
+          if git diff --staged --quiet; then
+            echo "Scoop manifest already up to date."
+            exit 0
+          fi
+          git commit -m "chore(scoop): update manifest for ${RELEASE_TAG}"
+          git push origin HEAD:refs/heads/master
