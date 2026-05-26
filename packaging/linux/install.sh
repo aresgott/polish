@@ -26,6 +26,72 @@ node_major() {
 
 need_node() { [ "$(node_major)" -lt "$MIN_NODE" ]; }
 
+npm_global_bin() {
+  local prefix
+  prefix=$(npm prefix -g 2>/dev/null) || return 1
+  printf '%s/bin' "${prefix}"
+}
+
+link_polish_to_system_bin() {
+  local src="$1"
+  local dir
+
+  for dir in /usr/local/bin /usr/bin; do
+    [ -d "$dir" ] || continue
+    if [ -w "$dir" ]; then
+      ln -sf "$src" "${dir}/${BIN}"
+    elif command -v sudo &>/dev/null; then
+      sudo ln -sf "$src" "${dir}/${BIN}" 2>/dev/null || continue
+    else
+      continue
+    fi
+    info "Linked ${BIN} to ${dir}/${BIN}"
+    return 0
+  done
+  return 1
+}
+
+ensure_shell_path() {
+  local global_bin="$1"
+  local line="export PATH=\"${global_bin}:\$PATH\""
+  local file marker="# polish: npm global bin"
+
+  for file in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [ -e "$file" ] || touch "$file"
+    if grep -Fq "$marker" "$file" 2>/dev/null || grep -Fq "$global_bin" "$file" 2>/dev/null; then
+      continue
+    fi
+    {
+      printf '\n%s\n%s\n' "$marker" "$line"
+    } >>"$file"
+    info "Added npm global bin to ${file}"
+  done
+}
+
+ensure_polish_on_path() {
+  local global_bin polish_bin
+
+  global_bin=$(npm_global_bin) || return 1
+  polish_bin="${global_bin}/${BIN}"
+  [ -x "$polish_bin" ] || return 1
+
+  if command -v "${BIN}" &>/dev/null; then
+    return 0
+  fi
+
+  case ":${PATH}:" in
+    *":${global_bin}:"*) ;;
+    *) export PATH="${global_bin}:${PATH}" ;;
+  esac
+  command -v "${BIN}" &>/dev/null && return 0
+
+  link_polish_to_system_bin "$polish_bin" && command -v "${BIN}" &>/dev/null && return 0
+
+  ensure_shell_path "$global_bin"
+  export PATH="${global_bin}:${PATH}"
+  command -v "${BIN}" &>/dev/null
+}
+
 install_node_nvm() {
   local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
   if [ ! -f "$nvm_dir/nvm.sh" ]; then
@@ -118,14 +184,23 @@ main() {
   install_polish
   install_clipboard_linux
 
-  if command -v "${BIN}" &>/dev/null; then
+  local global_bin
+  global_bin=$(npm_global_bin) || true
+
+  if ensure_polish_on_path; then
     printf "\n${GREEN}${BOLD}Done!${NC} Run:\n\n"
     printf "  ${BOLD}polish login${NC}   — sign in with ChatGPT or Claude\n"
     printf "  ${BOLD}polish --help${NC}  — full reference\n\n"
+  elif [ -n "${global_bin}" ] && [ -x "${global_bin}/${BIN}" ]; then
+    warn "'${BIN}' is installed at ${global_bin}/${BIN} but could not be added to PATH automatically."
+    warn "Run: export PATH=\"${global_bin}:\$PATH\""
   else
-    warn "'${BIN}' installed but not found in PATH."
-    warn "Open a new terminal or add npm's global bin to PATH:"
-    warn "  export PATH=\"\$(npm bin -g):\$PATH\""
+    warn "'${BIN}' install finished but the command was not found."
+    if [ -n "${global_bin}" ]; then
+      warn "Expected binary: ${global_bin}/${BIN}"
+      warn "Check: ls -la ${global_bin}/${BIN}"
+    fi
+    warn "Try: npm install -g ${PACKAGE}"
   fi
 }
 

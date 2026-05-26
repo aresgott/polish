@@ -13,7 +13,8 @@ The installer:
 1. Ensures Node.js 20+ (apt, Homebrew, or nvm)
 2. Removes the unrelated `polish-cli` npm package if present (name collision)
 3. Installs `@aresgott/polish` from npm (GitHub fallback if unpublished)
-4. Installs `xclip` on Debian/Ubuntu when no clipboard utility is found
+4. Adds `polish` to your PATH (symlink in `/usr/local/bin` when possible, otherwise `~/.profile` / `~/.bashrc`)
+5. Installs `xclip` on Debian/Ubuntu when no clipboard utility is found
 
 Manual install:
 
