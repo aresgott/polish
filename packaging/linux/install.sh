@@ -32,6 +32,54 @@ npm_global_bin() {
   printf '%s/bin' "${prefix}"
 }
 
+polish_package_cli() {
+  local npm_global="${1:-$(npm root -g 2>/dev/null || true)}"
+  local candidate
+
+  [ -n "$npm_global" ] || return 1
+  candidate="${npm_global}/@aresgott/polish/dist/cli.js"
+  [ -f "$candidate" ] || return 1
+  chmod +x "$candidate" 2>/dev/null || true
+  printf '%s\n' "$candidate"
+}
+
+polish_cli_path() {
+  local global_bin npm_bin pkg_cli
+
+  global_bin=$(npm_global_bin) || true
+  if [ -n "$global_bin" ]; then
+    npm_bin="${global_bin}/${BIN}"
+    if [ -L "$npm_bin" ] || [ -x "$npm_bin" ]; then
+      printf '%s\n' "$npm_bin"
+      return 0
+    fi
+  fi
+
+  if pkg_cli=$(polish_package_cli); then
+    printf '%s\n' "$pkg_cli"
+    return 0
+  fi
+
+  return 1
+}
+
+ensure_npm_bin_link() {
+  local cli_path global_bin npm_bin
+
+  cli_path=$(polish_cli_path) || return 1
+  global_bin=$(npm_global_bin) || return 0
+  npm_bin="${global_bin}/${BIN}"
+
+  if [ "$cli_path" = "$npm_bin" ]; then
+    return 0
+  fi
+
+  if [ ! -e "$npm_bin" ]; then
+    ln -sf "$cli_path" "$npm_bin"
+    info "Linked ${BIN} into ${npm_bin}"
+  fi
+}
+
 link_polish_to_system_bin() {
   local src="$1"
   local dir
@@ -69,26 +117,31 @@ ensure_shell_path() {
 }
 
 ensure_polish_on_path() {
-  local global_bin polish_bin
+  local cli_path global_bin
 
-  global_bin=$(npm_global_bin) || return 1
-  polish_bin="${global_bin}/${BIN}"
-  [ -x "$polish_bin" ] || return 1
+  cli_path=$(polish_cli_path) || return 1
+  ensure_npm_bin_link || true
+  cli_path=$(polish_cli_path) || return 1
 
   if command -v "${BIN}" &>/dev/null; then
     return 0
   fi
 
-  case ":${PATH}:" in
-    *":${global_bin}:"*) ;;
-    *) export PATH="${global_bin}:${PATH}" ;;
-  esac
-  command -v "${BIN}" &>/dev/null && return 0
+  global_bin=$(npm_global_bin) || true
+  if [ -n "$global_bin" ]; then
+    case ":${PATH}:" in
+      *":${global_bin}:"*) ;;
+      *) export PATH="${global_bin}:${PATH}" ;;
+    esac
+    command -v "${BIN}" &>/dev/null && return 0
+  fi
 
-  link_polish_to_system_bin "$polish_bin" && command -v "${BIN}" &>/dev/null && return 0
+  link_polish_to_system_bin "$cli_path" && command -v "${BIN}" &>/dev/null && return 0
 
-  ensure_shell_path "$global_bin"
-  export PATH="${global_bin}:${PATH}"
+  if [ -n "$global_bin" ]; then
+    ensure_shell_path "$global_bin"
+    export PATH="${global_bin}:${PATH}"
+  fi
   command -v "${BIN}" &>/dev/null
 }
 
@@ -153,9 +206,23 @@ install_polish() {
   if npm view "${PACKAGE}" version &>/dev/null; then
     npm install -g "${PACKAGE}" --quiet
   else
-    warn "${PACKAGE} not on npm yet; installing from GitHub…"
-    npm install -g "github:aresgott/polish" --quiet
+    local tag url
+    tag=$(curl -sf https://api.github.com/repos/aresgott/polish/releases/latest \
+      | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      | head -n1)
+    if [ -z "$tag" ]; then
+      tag="v1.0.0"
+    fi
+    url="https://github.com/aresgott/polish/archive/refs/tags/${tag}.tar.gz"
+    warn "${PACKAGE} not on npm yet; installing ${tag} from GitHub…"
+    npm install -g "$url" --quiet
   fi
+
+  if ! polish_package_cli &>/dev/null; then
+    error "Install finished but dist/cli.js was not found under $(npm root -g 2>/dev/null)/@aresgott/polish"
+  fi
+
+  ensure_npm_bin_link || true
 }
 
 # ── main ───────────────────────────────────────────────────────────────────────
@@ -184,23 +251,22 @@ main() {
   install_polish
   install_clipboard_linux
 
-  local global_bin
-  global_bin=$(npm_global_bin) || true
-
   if ensure_polish_on_path; then
     printf "\n${GREEN}${BOLD}Done!${NC} Run:\n\n"
     printf "  ${BOLD}polish login${NC}   — sign in with ChatGPT or Claude\n"
     printf "  ${BOLD}polish --help${NC}  — full reference\n\n"
-  elif [ -n "${global_bin}" ] && [ -x "${global_bin}/${BIN}" ]; then
-    warn "'${BIN}' is installed at ${global_bin}/${BIN} but could not be added to PATH automatically."
-    warn "Run: export PATH=\"${global_bin}:\$PATH\""
+  elif cli_path=$(polish_cli_path 2>/dev/null); then
+    warn "'${BIN}' is installed at ${cli_path} but could not be added to PATH automatically."
+    warn "Run: ln -sf ${cli_path} /usr/local/bin/${BIN}"
   else
     warn "'${BIN}' install finished but the command was not found."
-    if [ -n "${global_bin}" ]; then
-      warn "Expected binary: ${global_bin}/${BIN}"
-      warn "Check: ls -la ${global_bin}/${BIN}"
+    npm_global=$(npm root -g 2>/dev/null) || true
+    if [ -n "${npm_global}" ]; then
+      warn "Expected CLI: ${npm_global}/@aresgott/polish/dist/cli.js"
+      warn "Check: ls -la ${npm_global}/@aresgott/polish/dist/cli.js"
     fi
-    warn "Try: npm install -g ${PACKAGE}"
+    warn "Publish to npm with: npm publish"
+    warn "Or reinstall: npm install -g @aresgott/polish"
   fi
 }
 
