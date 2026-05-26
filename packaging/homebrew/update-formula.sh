@@ -53,7 +53,7 @@ else
   perl -i -pe "s{^  url \".*\"}{  url \"$url\"}" "$formula"
   perl -i -pe "s{^  sha256 \".*\"}{  sha256 \"$sha256\"}" "$formula"
   perl -i -pe 's/(assert_equal ")[^"]+(", shell_output)/${1}'"$version"'${2}/' "$formula"
-  perl -i -pe 's{branch: "[^"]+"}{branch: "master"}' "$formula"
+  perl -i -pe 's{branch: "[^"]+"}{branch: "main"}' "$formula"
 fi
 
 echo "Updated $formula for v${version}"

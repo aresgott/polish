@@ -26,22 +26,22 @@ packaging/
 
 ## Release checklist
 
-After merging to `master`:
+After merging to `main`:
 
 1. Bump `version` in `package.json` (and run `npm run build` if you commit `dist/`).
-2. Commit and push to `master`.
+2. Commit and push to `main`.
 3. Tag and push:
 
    ```bash
    git tag vX.Y.Z
-   git push origin master
+   git push origin main
    git push origin vX.Y.Z
    ```
 
 4. CI (`.github/workflows/release.yml`) will:
    - Create the GitHub release (tag push)
    - Update **homebrew-polish** formula (`url`, `sha256`, test version)
-   - Bump `packaging/scoop/polish.json` on `master`
+   - Bump `packaging/scoop/polish.json` on `main`
 
 5. Publish to npm:
 
@@ -51,7 +51,7 @@ After merging to `master`:
 
 ## Manual workflow dispatch
 
-**Actions → Release → Run workflow** on `master`:
+**Actions → Release → Run workflow** on `main`:
 
 - **Version:** e.g. `v1.0.0`
 - **Update Homebrew only:** check to skip Scoop manifest update

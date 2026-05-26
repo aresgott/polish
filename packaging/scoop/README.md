@@ -4,7 +4,7 @@ Install:
 
 ```powershell
 scoop install nodejs
-scoop install https://raw.githubusercontent.com/aresgott/polish/master/packaging/scoop/polish.json
+scoop install https://raw.githubusercontent.com/aresgott/polish/main/packaging/scoop/polish.json
 ```
 
 Upgrade:
@@ -19,4 +19,4 @@ Version checks use the npm registry (`@aresgott/polish`).
 
 ## CI
 
-On every release (tag push, published release, or manual workflow dispatch), CI runs `packaging/scoop/bump-version.sh` and commits the updated manifest to `master`.
+On every release (tag push, published release, or manual workflow dispatch), CI runs `packaging/scoop/bump-version.sh` and commits the updated manifest to `main`.

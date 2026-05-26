@@ -33,10 +33,10 @@
 brew tap aresgott/polish && brew install polish
 
 # Linux
-curl -fsSL https://raw.githubusercontent.com/aresgott/polish/master/packaging/linux/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aresgott/polish/main/packaging/linux/install.sh | bash
 
 # Windows (PowerShell)
-scoop install nodejs && scoop install https://raw.githubusercontent.com/aresgott/polish/master/packaging/scoop/polish.json
+scoop install nodejs && scoop install https://raw.githubusercontent.com/aresgott/polish/main/packaging/scoop/polish.json
 
 polish login                 # sign in with ChatGPT or Claude (opens browser)
 polish thanks for the quik update
@@ -67,7 +67,7 @@ npm install -g @aresgott/polish
 ### Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aresgott/polish/master/packaging/linux/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aresgott/polish/main/packaging/linux/install.sh | bash
 ```
 
 The script installs Node.js (apt/Homebrew/nvm), installs `@aresgott/polish`, and tries to install a clipboard utility (`xclip`) if none is present.
@@ -88,7 +88,7 @@ npm install -g @aresgott/polish   # requires Node.js 20+
 
 ```powershell
 scoop install nodejs
-scoop install https://raw.githubusercontent.com/aresgott/polish/master/packaging/scoop/polish.json
+scoop install https://raw.githubusercontent.com/aresgott/polish/main/packaging/scoop/polish.json
 ```
 
 > The legacy URL `scoop/polish.json` is kept in sync for existing installs.

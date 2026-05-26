@@ -4,7 +4,7 @@ class Polish < Formula
   url "{{URL}}"
   sha256 "{{SHA256}}"
   license "MIT"
-  head "https://github.com/aresgott/polish.git", branch: "master"
+  head "https://github.com/aresgott/polish.git", branch: "main"
 
   depends_on "node@20"
 

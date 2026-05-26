@@ -3,7 +3,7 @@
 One-line install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aresgott/polish/master/packaging/linux/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/aresgott/polish/main/packaging/linux/install.sh | bash
 ```
 
 The legacy URL `scripts/install.sh` still works (it forwards to this script).
