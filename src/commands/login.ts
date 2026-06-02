@@ -1,5 +1,6 @@
 import { runCodexLogin } from "../auth/codex-login.js";
 import { runClaudeLogin } from "../auth/claude-login.js";
+import { runCopilotLogin } from "../auth/copilot-login.js";
 import { hasProviderAuth } from "../auth/provider-auth.js";
 import {
   PROVIDER_LABELS,
@@ -18,6 +19,12 @@ async function runProviderLogin(provider: Provider, device: boolean): Promise<nu
         return 1;
       }
       return runClaudeLogin();
+    case "copilot":
+      if (device) {
+        console.error("Copilot login uses OAuth in your browser. Omit --device.");
+        return 1;
+      }
+      return runCopilotLogin();
   }
 }
 
@@ -31,7 +38,7 @@ export async function loginCommand(options: {
     provider = await selectProvider();
     if (!provider) {
       console.error(
-        "No provider selected. Run interactively, or: polish login chatgpt|claude",
+        "No provider selected. Run interactively, or: polish login chatgpt|claude|copilot",
       );
       process.exit(1);
     }
@@ -54,6 +61,10 @@ export async function loginCommand(options: {
       console.log("Opening your browser…");
       console.log("If it doesn't open, use the link below.\n");
     }
+  } else if (provider === "copilot") {
+    console.log("Sign in with GitHub Copilot\n");
+    console.log("Opening your browser…");
+    console.log("If it doesn't open, use the link below.\n");
   }
 
   const code = await runProviderLogin(provider, device);
@@ -78,5 +89,9 @@ export async function loginCommand(options: {
   if (provider === "chatgpt") {
     console.log("\nNote: Only one device can be signed in at a time.");
     console.log("Signing in here will invalidate any other active session.");
+  }
+
+  if (provider === "copilot") {
+    console.log("\nNote: Each polish uses one Copilot premium request.");
   }
 }

@@ -2,6 +2,7 @@ import type { Provider } from "../config/provider.js";
 import { loadProvider } from "../config/provider.js";
 import { hasClaudeAuth } from "./claude-auth.js";
 import { hasCodexAuth } from "./codex-auth.js";
+import { hasCopilotAuth } from "./copilot-auth.js";
 
 export async function hasProviderAuth(provider: Provider): Promise<boolean> {
   switch (provider) {
@@ -9,6 +10,8 @@ export async function hasProviderAuth(provider: Provider): Promise<boolean> {
       return hasCodexAuth();
     case "claude":
       return hasClaudeAuth();
+    case "copilot":
+      return hasCopilotAuth();
   }
 }
 
@@ -19,6 +22,7 @@ export async function resolveActiveProvider(): Promise<Provider> {
   }
   if (await hasCodexAuth()) return "chatgpt";
   if (await hasClaudeAuth()) return "claude";
+  if (await hasCopilotAuth()) return "copilot";
   return configured ?? "chatgpt";
 }
 

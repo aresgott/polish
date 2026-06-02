@@ -4,6 +4,7 @@ import { getCodexAuthPath } from "../auth/codex-auth.js";
 import { resolveActiveProvider } from "../auth/provider-auth.js";
 import type { Provider } from "../config/provider.js";
 import { generateWithClaude } from "./generate-claude.js";
+import { generateWithCopilot } from "./generate-copilot.js";
 
 const PREFERRED_MODELS = [
   "gpt-4o-mini",
@@ -23,6 +24,10 @@ export async function generateWithSystemPrompt(
 
   if (active === "claude") {
     return generateWithClaude(input, system);
+  }
+
+  if (active === "copilot") {
+    return generateWithCopilot(input, system);
   }
   const openai = createOpenAIOAuth({
     authFilePath: getCodexAuthPath(),

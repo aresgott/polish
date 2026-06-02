@@ -10,7 +10,7 @@
 <h1 align="center">Polish</h1>
 
 <p align="center">
-  A small CLI that fixes grammar, adjusts tone, and writes for you — powered by ChatGPT or Claude.
+  A small CLI that fixes grammar, adjusts tone, and writes for you — powered by ChatGPT, Claude, or GitHub Copilot.
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/aresgott/polish/main/packaging/linu
 # Windows (PowerShell)
 scoop install nodejs && scoop install https://raw.githubusercontent.com/aresgott/polish/main/packaging/scoop/polish.json
 
-polish login                 # sign in with ChatGPT or Claude (opens browser)
+polish login                 # sign in with ChatGPT, Claude, or Copilot (opens browser)
 polish thanks for the quik update
 # → polished text on your clipboard
 
@@ -113,17 +113,18 @@ npm link
 
 ## Authentication
 
-Polish signs in through your existing **ChatGPT** or **Claude** subscription — no API key needed.
+Polish signs in through your existing **ChatGPT**, **Claude**, or **GitHub Copilot** subscription — no API key needed.
 
 ```bash
-polish login                 # interactive menu — pick ChatGPT or Claude
+polish login                 # interactive menu — pick ChatGPT, Claude, or Copilot
 polish login chatgpt         # sign in with ChatGPT (browser)
 polish login claude          # sign in with Claude (browser)
+polish login copilot         # sign in with GitHub Copilot (browser)
 polish login --device        # device-code login for ChatGPT (SSH / headless)
 polish logout                # sign out
 ```
 
-Credentials are stored in `~/.codex/auth.json` (ChatGPT) or `~/.claude/.credentials.json` (Claude).
+Credentials are stored in `~/.codex/auth.json` (ChatGPT), `~/.claude/.credentials.json` (Claude), or `~/.copilot` (Copilot OAuth). Each Copilot polish uses one premium request on your subscription.
 
 ## Usage
 
