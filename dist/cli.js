@@ -530,7 +530,7 @@ async function hasCodexAuth() {
 }
 
 // src/auth/copilot-config.ts
-import { readFile as readFile3, writeFile as writeFile2 } from "fs/promises";
+import { readFile as readFile3 } from "fs/promises";
 import { homedir as homedir4 } from "os";
 import { join as join4 } from "path";
 function getCopilotHome() {
@@ -543,29 +543,14 @@ function parseCopilotConfig(raw) {
   const withoutComments = raw.replace(/^\s*\/\/.*$/gm, "");
   return JSON.parse(withoutComments);
 }
-async function readCopilotConfig() {
+async function hasCopilotStoredLogin() {
   try {
     const raw = await readFile3(getCopilotConfigPath(), "utf8");
-    return parseCopilotConfig(raw);
+    const config = parseCopilotConfig(raw);
+    return (config.loggedInUsers?.length ?? 0) > 0;
   } catch {
-    return null;
+    return false;
   }
-}
-async function hasCopilotStoredLogin() {
-  const config = await readCopilotConfig();
-  return (config?.loggedInUsers?.length ?? 0) > 0;
-}
-async function getCopilotLoggedInUsers() {
-  const config = await readCopilotConfig();
-  return config?.loggedInUsers ?? [];
-}
-async function clearCopilotStoredLogin() {
-  const config = await readCopilotConfig();
-  if (!config) return;
-  delete config.loggedInUsers;
-  delete config.lastLoggedInUser;
-  await writeFile2(getCopilotConfigPath(), `${JSON.stringify(config, null, 2)}
-`, "utf8");
 }
 
 // src/auth/copilot-env.ts
@@ -699,6 +684,7 @@ async function runProviderLogin(provider, device) {
       }
       return runCopilotLogin();
   }
+  return false;
 }
 async function loginCommand(options) {
   let provider = options.provider ?? null;
@@ -926,13 +912,9 @@ import { createOpenAIOAuth } from "openai-oauth-provider";
 // src/ai/generate-claude.ts
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
-
-// src/ai/response-clean.ts
-function cleanModelOutput(text) {
-  return text.replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "").replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "").replace(/<sql_tables>[\s\S]*?<\/sql_tables>/g, "").trim();
+function stripInjectedXml(text) {
+  return text.replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "").replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "").trim();
 }
-
-// src/ai/generate-claude.ts
 var PREFERRED_MODELS = [
   "claude-haiku-4-5",
   "claude-haiku-4-5-20251001",
@@ -976,7 +958,7 @@ async function generateWithClaude(input, system) {
         prompt: input,
         maxRetries: 1
       });
-      const text = cleanModelOutput(result.text);
+      const text = stripInjectedXml(result.text.trim());
       if (text) return text;
     } catch (err) {
       lastError = err;
@@ -1732,7 +1714,7 @@ function manualUpdateHint(method) {
 }
 
 // src/update/state.ts
-import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile3 } from "fs/promises";
+import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile2 } from "fs/promises";
 import { homedir as homedir5 } from "os";
 import { join as join5 } from "path";
 var CHECK_INTERVAL_MS = 3 * 24 * 60 * 60 * 1e3;
@@ -1750,7 +1732,7 @@ async function loadUpdateState() {
 async function saveUpdateState(state) {
   const path3 = getUpdateStatePath();
   await mkdir2(join5(homedir5(), ".polish"), { recursive: true });
-  await writeFile3(path3, `${JSON.stringify(state, null, 2)}
+  await writeFile2(path3, `${JSON.stringify(state, null, 2)}
 `, { mode: 384 });
 }
 function isCheckDue(state, now = Date.now()) {

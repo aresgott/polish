@@ -3,6 +3,13 @@ import { generateText } from "ai";
 import { getClaudeAccessToken } from "../auth/claude-auth.js";
 import { cleanModelOutput } from "./response-clean.js";
 
+function stripInjectedXml(text: string): string {
+  return text
+    .replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "")
+    .replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "")
+    .trim();
+}
+
 /** OAuth subscription tokens support current 4.x models, not legacy 3.5 IDs. */
 const PREFERRED_MODELS = [
   "claude-haiku-4-5",
@@ -58,7 +65,7 @@ export async function generateWithClaude(
         prompt: input,
         maxRetries: 1,
       });
-      const text = cleanModelOutput(result.text);
+      const text = stripInjectedXml(result.text.trim());
       if (text) return text;
     } catch (err) {
       lastError = err;
