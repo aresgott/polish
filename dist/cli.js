@@ -679,7 +679,6 @@ async function runProviderLogin(provider, device) {
       }
       return runCopilotLogin();
   }
-  return false;
 }
 async function loginCommand(options) {
   let provider = options.provider ?? null;
@@ -860,6 +859,9 @@ import { createOpenAIOAuth } from "openai-oauth-provider";
 // src/ai/generate-claude.ts
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+function stripInjectedXml(text) {
+  return text.replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "").replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "").trim();
+}
 var PREFERRED_MODELS = [
   "claude-haiku-4-5",
   "claude-haiku-4-5-20251001",
@@ -903,7 +905,7 @@ async function generateWithClaude(input, system) {
         prompt: input,
         maxRetries: 1
       });
-      const text = result.text.trim();
+      const text = stripInjectedXml(result.text.trim());
       if (text) return text;
     } catch (err) {
       lastError = err;

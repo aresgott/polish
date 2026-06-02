@@ -38,16 +38,6 @@ async function runProviderLogin(provider: Provider, device: boolean): Promise<nu
   }
 }
 
-async function waitForProviderAuth(provider: Provider): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    if (await hasProviderAuth(provider)) return true;
-    if (attempt < 4) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    }
-  }
-  return false;
-}
-
 export async function loginCommand(options: {
   device?: boolean;
   provider?: Provider | null;
