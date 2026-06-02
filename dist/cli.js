@@ -926,9 +926,13 @@ import { createOpenAIOAuth } from "openai-oauth-provider";
 // src/ai/generate-claude.ts
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
-function stripInjectedXml(text) {
-  return text.replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "").replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "").trim();
+
+// src/ai/response-clean.ts
+function cleanModelOutput(text) {
+  return text.replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "").replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "").replace(/<sql_tables>[\s\S]*?<\/sql_tables>/g, "").trim();
 }
+
+// src/ai/generate-claude.ts
 var PREFERRED_MODELS = [
   "claude-haiku-4-5",
   "claude-haiku-4-5-20251001",
@@ -972,7 +976,7 @@ async function generateWithClaude(input, system) {
         prompt: input,
         maxRetries: 1
       });
-      const text = stripInjectedXml(result.text.trim());
+      const text = cleanModelOutput(result.text);
       if (text) return text;
     } catch (err) {
       lastError = err;
@@ -1020,7 +1024,7 @@ async function generateWithCopilot(input, system) {
             { prompt: input },
             SEND_TIMEOUT_MS
           );
-          const text = response?.data.content?.trim() ?? "";
+          const text = cleanModelOutput(response?.data.content ?? "");
           if (text) return text;
         } finally {
           await session.disconnect();
@@ -1065,7 +1069,7 @@ async function generateWithSystemPrompt(input, system, provider) {
         system,
         prompt: input
       });
-      const text = result.text.trim();
+      const text = cleanModelOutput(result.text);
       if (text) return text;
     } catch (err) {
       lastError = err;

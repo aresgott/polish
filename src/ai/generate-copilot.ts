@@ -1,6 +1,7 @@
 import { approveAll } from "@github/copilot-sdk";
 import { withPolishCopilotClient } from "../auth/copilot-client.js";
 import { hasCopilotAuth } from "../auth/copilot-auth.js";
+import { cleanModelOutput } from "./response-clean.js";
 
 const PREFERRED_MODELS = [
   "gpt-4o-mini",
@@ -42,7 +43,7 @@ export async function generateWithCopilot(
             { prompt: input },
             SEND_TIMEOUT_MS,
           );
-          const text = response?.data.content?.trim() ?? "";
+          const text = cleanModelOutput(response?.data.content ?? "");
           if (text) return text;
         } finally {
           await session.disconnect();

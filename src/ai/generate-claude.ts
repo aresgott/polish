@@ -1,13 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { getClaudeAccessToken } from "../auth/claude-auth.js";
-
-function stripInjectedXml(text: string): string {
-  return text
-    .replace(/<current_datetime>[\s\S]*?<\/current_datetime>/g, "")
-    .replace(/<system_reminder>[\s\S]*?<\/system_reminder>/g, "")
-    .trim();
-}
+import { cleanModelOutput } from "./response-clean.js";
 
 /** OAuth subscription tokens support current 4.x models, not legacy 3.5 IDs. */
 const PREFERRED_MODELS = [
@@ -64,7 +58,7 @@ export async function generateWithClaude(
         prompt: input,
         maxRetries: 1,
       });
-      const text = stripInjectedXml(result.text.trim());
+      const text = cleanModelOutput(result.text);
       if (text) return text;
     } catch (err) {
       lastError = err;
