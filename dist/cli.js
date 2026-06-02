@@ -614,6 +614,7 @@ async function runProviderLogin(provider, device) {
       }
       return runCopilotLogin();
   }
+  return false;
 }
 async function loginCommand(options) {
   let provider = options.provider ?? null;
@@ -656,7 +657,7 @@ async function loginCommand(options) {
     }
     process.exit(code);
   }
-  const ok = await hasProviderAuth(provider);
+  const ok = provider === "copilot" ? await waitForProviderAuth(provider) : await hasProviderAuth(provider);
   if (!ok) {
     console.error("\nLogin finished but credentials were not saved. Try again.");
     process.exit(1);
@@ -1593,16 +1594,16 @@ function manualUpdateHint(method) {
 }
 
 // src/update/state.ts
-import { mkdir as mkdir2, readFile as readFile3, writeFile as writeFile2 } from "fs/promises";
-import { homedir as homedir4 } from "os";
-import { join as join4 } from "path";
+import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile2 } from "fs/promises";
+import { homedir as homedir5 } from "os";
+import { join as join5 } from "path";
 var CHECK_INTERVAL_MS = 3 * 24 * 60 * 60 * 1e3;
 function getUpdateStatePath() {
-  return join4(homedir4(), ".polish", "update-check.json");
+  return join5(homedir5(), ".polish", "update-check.json");
 }
 async function loadUpdateState() {
   try {
-    const raw = await readFile3(getUpdateStatePath(), "utf8");
+    const raw = await readFile4(getUpdateStatePath(), "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
