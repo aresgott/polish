@@ -4,7 +4,7 @@
     "access": "public"
   },
   "version": "1.0.0",
-  "description": "Polish — fix grammar, set tone, copy to clipboard (ChatGPT or Claude)",
+  "description": "Polish — fix grammar, set tone, copy to clipboard (ChatGPT, Claude, or Copilot)",
   "type": "module",
   "bin": {
     "polish": "./dist/cli.js"
@@ -33,6 +33,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.79",
     "@clack/prompts": "^1.4.0",
+    "@github/copilot-sdk": "^1.0.0",
     "@openai/codex": "^0.132.0",
     "ai": "^6.0.116",
     "clipboardy": "^4.0.0",

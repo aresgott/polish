@@ -6,14 +6,21 @@ import { homedir } from "os";
 import { join } from "path";
 
 // src/config/provider.ts
-var PROVIDERS = ["chatgpt", "claude"];
+var PROVIDERS = ["chatgpt", "claude", "copilot"];
 var PROVIDER_LABELS = {
   chatgpt: "ChatGPT (Codex OAuth)",
-  claude: "Claude (subscription OAuth)"
+  claude: "Claude (subscription OAuth)",
+  copilot: "GitHub Copilot (OAuth)"
+};
+var PROVIDER_ALIASES = {
+  github: "copilot"
 };
 function parseProviderName(name) {
   const key = name.trim().toLowerCase();
-  return PROVIDERS.includes(key) ? key : null;
+  if (PROVIDERS.includes(key)) {
+    return key;
+  }
+  return PROVIDER_ALIASES[key] ?? null;
 }
 async function loadProvider() {
   const config = await loadConfig();
@@ -350,6 +357,59 @@ async function runClaudeLogin() {
   });
 }
 
+// src/auth/copilot-login.ts
+import { spawn as spawn3 } from "child_process";
+
+// src/auth/copilot-bin.ts
+import { execFileSync as execFileSync3 } from "child_process";
+import { createRequire as createRequire3 } from "module";
+import path3 from "path";
+var require4 = createRequire3(import.meta.url);
+function findCopilotInPath() {
+  try {
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const result = execFileSync3(cmd, ["copilot"], { encoding: "utf8" }).trim();
+    return result.split("\n")[0] || null;
+  } catch {
+    return null;
+  }
+}
+function resolveCopilotBin() {
+  const systemCopilot = findCopilotInPath();
+  if (systemCopilot) return systemCopilot;
+  try {
+    const pkgJson = require4.resolve("@github/copilot/package.json");
+    return path3.join(path3.dirname(pkgJson), "npm-loader.js");
+  } catch {
+    throw new Error(
+      "GitHub Copilot CLI not found. Install it with: npm install -g @github/copilot"
+    );
+  }
+}
+
+// src/auth/copilot-login.ts
+async function runCopilotLogin() {
+  const copilotBin = resolveCopilotBin();
+  const filter = createLoginOutputFilter({ device: false });
+  return new Promise((resolve, reject) => {
+    const child = spawn3(process.execPath, [copilotBin, "login"], {
+      stdio: ["inherit", "pipe", "pipe"],
+      env: process.env
+    });
+    const onData = (chunk, out) => {
+      filter.write(chunk, out);
+    };
+    child.stdout?.on("data", (chunk) => onData(chunk, process.stdout));
+    child.stderr?.on("data", (chunk) => onData(chunk, process.stderr));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      filter.flush(process.stdout);
+      filter.flush(process.stderr);
+      resolve(code ?? 1);
+    });
+  });
+}
+
 // src/auth/claude-auth.ts
 import { execFile } from "child_process";
 import { access, readFile as readFile2 } from "fs/promises";
@@ -439,6 +499,57 @@ async function hasCodexAuth() {
   }
 }
 
+// src/auth/copilot-env.ts
+var COPILOT_TOKEN_ENV_KEYS = [
+  "COPILOT_GITHUB_TOKEN",
+  "GH_TOKEN",
+  "GITHUB_TOKEN"
+];
+function isCopilotCompatibleToken(token) {
+  return token.startsWith("gho_") || token.startsWith("github_pat_") || token.startsWith("ghu_");
+}
+function getCopilotEnvToken() {
+  for (const key of COPILOT_TOKEN_ENV_KEYS) {
+    const value = process.env[key]?.trim();
+    if (value && isCopilotCompatibleToken(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+function hasCopilotEnvToken() {
+  return getCopilotEnvToken() !== null;
+}
+
+// src/auth/copilot-client.ts
+import { CopilotClient } from "@github/copilot-sdk";
+function createPolishCopilotClient() {
+  return new CopilotClient({
+    logLevel: "error"
+  });
+}
+async function withPolishCopilotClient(fn) {
+  const client = createPolishCopilotClient();
+  try {
+    return await fn(client);
+  } finally {
+    await client.stop();
+  }
+}
+
+// src/auth/copilot-auth.ts
+async function hasCopilotAuth() {
+  if (hasCopilotEnvToken()) return true;
+  try {
+    return await withPolishCopilotClient(async (client) => {
+      const status = await client.getAuthStatus();
+      return status.isAuthenticated;
+    });
+  } catch {
+    return false;
+  }
+}
+
 // src/auth/provider-auth.ts
 async function hasProviderAuth(provider) {
   switch (provider) {
@@ -446,6 +557,8 @@ async function hasProviderAuth(provider) {
       return hasCodexAuth();
     case "claude":
       return hasClaudeAuth();
+    case "copilot":
+      return hasCopilotAuth();
   }
 }
 async function resolveActiveProvider() {
@@ -455,6 +568,7 @@ async function resolveActiveProvider() {
   }
   if (await hasCodexAuth()) return "chatgpt";
   if (await hasClaudeAuth()) return "claude";
+  if (await hasCopilotAuth()) return "copilot";
   return configured ?? "chatgpt";
 }
 async function isLoggedIn() {
@@ -493,6 +607,12 @@ async function runProviderLogin(provider, device) {
         return 1;
       }
       return runClaudeLogin();
+    case "copilot":
+      if (device) {
+        console.error("Copilot login uses OAuth in your browser. Omit --device.");
+        return 1;
+      }
+      return runCopilotLogin();
   }
 }
 async function loginCommand(options) {
@@ -501,7 +621,7 @@ async function loginCommand(options) {
     provider = await selectProvider();
     if (!provider) {
       console.error(
-        "No provider selected. Run interactively, or: polish login chatgpt|claude"
+        "No provider selected. Run interactively, or: polish login chatgpt|claude|copilot"
       );
       process.exit(1);
     }
@@ -522,6 +642,10 @@ async function loginCommand(options) {
       console.log("Opening your browser\u2026");
       console.log("If it doesn't open, use the link below.\n");
     }
+  } else if (provider === "copilot") {
+    console.log("Sign in with GitHub Copilot\n");
+    console.log("Opening your browser\u2026");
+    console.log("If it doesn't open, use the link below.\n");
   }
   const code = await runProviderLogin(provider, device);
   if (code !== 0) {
@@ -544,14 +668,17 @@ async function loginCommand(options) {
     console.log("\nNote: Only one device can be signed in at a time.");
     console.log("Signing in here will invalidate any other active session.");
   }
+  if (provider === "copilot") {
+    console.log("\nNote: Each polish uses one Copilot premium request.");
+  }
 }
 
 // src/auth/codex-logout.ts
-import { spawn as spawn3 } from "child_process";
+import { spawn as spawn4 } from "child_process";
 async function runCodexLogout() {
   const codexBin = resolveCodexBin();
   return new Promise((resolve, reject) => {
-    const child = spawn3(process.execPath, [codexBin, "logout"], {
+    const child = spawn4(process.execPath, [codexBin, "logout"], {
       stdio: "inherit",
       env: process.env
     });
@@ -561,16 +688,53 @@ async function runCodexLogout() {
 }
 
 // src/auth/claude-logout.ts
-import { spawn as spawn4 } from "child_process";
+import { spawn as spawn5 } from "child_process";
 async function runClaudeLogout() {
   const claudeBin = resolveClaudeBin();
   return new Promise((resolve, reject) => {
-    const child = spawn4(claudeBin, ["auth", "logout"], {
+    const child = spawn5(claudeBin, ["auth", "logout"], {
       stdio: "inherit",
       env: process.env
     });
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? 1));
+  });
+}
+
+// src/auth/copilot-logout.ts
+function getRpcConnection(client) {
+  const connection = client.connection;
+  return connection ?? null;
+}
+async function runCopilotLogout() {
+  return withPolishCopilotClient(async (client) => {
+    const status = await client.getAuthStatus();
+    if (!status.isAuthenticated) {
+      return 0;
+    }
+    if (status.authType === "env") {
+      console.error(
+        "\nSigned in via environment variable. Unset COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN."
+      );
+      return 1;
+    }
+    if (status.authType === "gh-cli") {
+      console.error("\nSigned in via GitHub CLI. Run: gh auth logout");
+      return 1;
+    }
+    const connection = getRpcConnection(client);
+    if (connection) {
+      try {
+        await connection.sendRequest("auth.logout", {});
+        const after = await client.getAuthStatus();
+        if (!after.isAuthenticated) return 0;
+      } catch {
+      }
+    }
+    console.error(
+      "\nCould not sign out automatically. In Copilot CLI, run /logout, or remove stored credentials under ~/.copilot."
+    );
+    return 1;
   });
 }
 
@@ -596,6 +760,17 @@ async function logoutCommand() {
     const code = await runClaudeLogout();
     if (code !== 0) process.exit(code);
     if (await hasClaudeAuth()) {
+      console.error("\nSign-out finished but credentials may still be present.");
+      process.exit(1);
+    }
+  } else if (provider === "copilot") {
+    if (!await hasCopilotAuth()) {
+      console.log("You're not signed in.");
+      return;
+    }
+    const code = await runCopilotLogout();
+    if (code !== 0) process.exit(code);
+    if (await hasCopilotAuth()) {
       console.error("\nSign-out finished but credentials may still be present.");
       process.exit(1);
     }
@@ -676,8 +851,59 @@ async function generateWithClaude(input, system) {
   );
 }
 
-// src/ai/generate-text.ts
+// src/ai/generate-copilot.ts
+import { approveAll } from "@github/copilot-sdk";
 var PREFERRED_MODELS2 = [
+  "gpt-4o-mini",
+  "gpt-4o",
+  "gpt-5-mini",
+  "gpt-5",
+  "gpt-5.2",
+  "gpt-5.4"
+];
+var SEND_TIMEOUT_MS = 12e4;
+async function generateWithCopilot(input, system) {
+  if (!await hasCopilotAuth()) {
+    throw new Error("Not logged in to GitHub Copilot. Run: polish login copilot");
+  }
+  let lastError;
+  return withPolishCopilotClient(async (client) => {
+    for (const modelId of PREFERRED_MODELS2) {
+      try {
+        const session = await client.createSession({
+          model: modelId,
+          clientName: "polish",
+          onPermissionRequest: approveAll,
+          skipCustomInstructions: true,
+          systemMessage: {
+            mode: "replace",
+            content: system
+          }
+        });
+        try {
+          const response = await session.sendAndWait(
+            { prompt: input },
+            SEND_TIMEOUT_MS
+          );
+          const text = response?.data.content?.trim() ?? "";
+          if (text) return text;
+        } finally {
+          await session.disconnect();
+        }
+      } catch (err) {
+        lastError = err;
+        const message = err instanceof Error ? err.message : String(err);
+        if (/model/i.test(message) && /not found|invalid|unsupported/i.test(message)) {
+          continue;
+        }
+      }
+    }
+    throw lastError ?? new Error("Failed to generate text with any available Copilot model.");
+  });
+}
+
+// src/ai/generate-text.ts
+var PREFERRED_MODELS3 = [
   "gpt-4o-mini",
   "gpt-4o",
   "gpt-5-mini",
@@ -690,11 +916,14 @@ async function generateWithSystemPrompt(input, system, provider) {
   if (active === "claude") {
     return generateWithClaude(input, system);
   }
+  if (active === "copilot") {
+    return generateWithCopilot(input, system);
+  }
   const openai = createOpenAIOAuth({
     authFilePath: getCodexAuthPath()
   });
   let lastError;
-  for (const modelId of PREFERRED_MODELS2) {
+  for (const modelId of PREFERRED_MODELS3) {
     try {
       const result = await generateText2({
         model: openai(modelId),
@@ -812,11 +1041,11 @@ async function generatePrDescription(context) {
 }
 
 // src/util/git-diff.ts
-import { execFileSync as execFileSync3 } from "child_process";
+import { execFileSync as execFileSync4 } from "child_process";
 var MAX_DIFF_CHARS = 1e5;
 function runGit(args) {
   try {
-    return execFileSync3("git", args, {
+    return execFileSync4("git", args, {
       encoding: "utf8",
       maxBuffer: 12 * 1024 * 1024
     }).trim();
@@ -1259,7 +1488,7 @@ function getVersion() {
 }
 
 // src/update/install.ts
-import { execFile as execFile2, spawn as spawn5 } from "child_process";
+import { execFile as execFile2, spawn as spawn6 } from "child_process";
 import { promisify as promisify2 } from "util";
 
 // src/update/registry.ts
@@ -1336,7 +1565,7 @@ async function runUpdateInstall(method) {
   if (method === "homebrew") {
     return new Promise((resolve, reject) => {
       console.log("Updating via Homebrew\u2026\n");
-      const child = spawn5("brew", ["upgrade", "polish"], {
+      const child = spawn6("brew", ["upgrade", "polish"], {
         stdio: "inherit",
         env: process.env
       });
@@ -1347,7 +1576,7 @@ async function runUpdateInstall(method) {
   const spec = await resolveNpmInstallSpec();
   return new Promise((resolve, reject) => {
     console.log("Updating via npm\u2026\n");
-    const child = spawn5("npm", ["install", "-g", spec], {
+    const child = spawn6("npm", ["install", "-g", spec], {
       stdio: "inherit",
       env: process.env,
       shell: isWin
@@ -1380,9 +1609,9 @@ async function loadUpdateState() {
   }
 }
 async function saveUpdateState(state) {
-  const path3 = getUpdateStatePath();
+  const path4 = getUpdateStatePath();
   await mkdir2(join4(homedir4(), ".polish"), { recursive: true });
-  await writeFile2(path3, `${JSON.stringify(state, null, 2)}
+  await writeFile2(path4, `${JSON.stringify(state, null, 2)}
 `, { mode: 384 });
 }
 function isCheckDue(state, now = Date.now()) {
@@ -1488,7 +1717,7 @@ function showUsage() {
   const toneRows = TONE_REFERENCE.map(
     (t) => row(`${t.tone.padEnd(12)} ${t.short}  ${t.long}`, t.description)
   ).join("\n");
-  console.log(`polish \u2014 Polish text with ChatGPT or Claude (grammar, tone, clipboard)
+  console.log(`polish \u2014 Polish text with ChatGPT, Claude, or GitHub Copilot (grammar, tone, clipboard)
 
 USAGE
 ${row("polish [options] [text ...]", "Polish inline text")}
@@ -1496,8 +1725,8 @@ ${row("polish [options]", "Read from clipboard, or stdin when piped")}
 ${row("polish <command>", "login, logout, config, update, shell-init")}
 
 COMMANDS
-${row("login", "Sign in (arrow menu: ChatGPT or Claude)")}
-${row("login chatgpt|claude", "Sign in with a specific provider")}
+${row("login", "Sign in (arrow menu: ChatGPT, Claude, or Copilot)")}
+${row("login chatgpt|claude|copilot", "Sign in with a specific provider")}
 ${row("login --device", "Device / headless login (ChatGPT only)")}
 ${row("logout", "Sign out from the active provider")}
 ${row("update", "Check for updates and install (also runs every 3 days)")}
@@ -1563,7 +1792,8 @@ APOSTROPHES (don't, it's)
 NOTES
   \u2022 Piped prose (cat file | polish) prints only; -c/--pr use the same -p/-np rules with or without a pipe
   \u2022 Emojis in input are preserved in the output
-  \u2022 Auth: ChatGPT ~/.codex/auth.json \xB7 Claude ~/.claude/.credentials.json
+  \u2022 Auth: ChatGPT ~/.codex/auth.json \xB7 Claude ~/.claude/.credentials.json \xB7 Copilot ~/.copilot (OAuth)
+  \u2022 Copilot: each run uses one premium request on your subscription
   \u2022 Config: ~/.polish/config.json (tone, provider)
   \u2022 Updates: checked every 3 days; skip a version with N, or run polish update anytime
   \u2022 Disable auto-check: POLISH_SKIP_UPDATE_CHECK=1

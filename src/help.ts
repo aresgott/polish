@@ -21,7 +21,7 @@ export function showUsage(): void {
     row(`${t.tone.padEnd(12)} ${t.short}  ${t.long}`, t.description),
   ).join("\n");
 
-  console.log(`polish — Polish text with ChatGPT or Claude (grammar, tone, clipboard)
+  console.log(`polish — Polish text with ChatGPT, Claude, or GitHub Copilot (grammar, tone, clipboard)
 
 USAGE
 ${row("polish [options] [text ...]", "Polish inline text")}
@@ -29,8 +29,8 @@ ${row("polish [options]", "Read from clipboard, or stdin when piped")}
 ${row("polish <command>", "login, logout, config, update, shell-init")}
 
 COMMANDS
-${row("login", "Sign in (arrow menu: ChatGPT or Claude)")}
-${row("login chatgpt|claude", "Sign in with a specific provider")}
+${row("login", "Sign in (arrow menu: ChatGPT, Claude, or Copilot)")}
+${row("login chatgpt|claude|copilot", "Sign in with a specific provider")}
 ${row("login --device", "Device / headless login (ChatGPT only)")}
 ${row("logout", "Sign out from the active provider")}
 ${row("update", "Check for updates and install (also runs every 3 days)")}
@@ -96,7 +96,8 @@ APOSTROPHES (don't, it's)
 NOTES
   • Piped prose (cat file | polish) prints only; -c/--pr use the same -p/-np rules with or without a pipe
   • Emojis in input are preserved in the output
-  • Auth: ChatGPT ~/.codex/auth.json · Claude ~/.claude/.credentials.json
+  • Auth: ChatGPT ~/.codex/auth.json · Claude ~/.claude/.credentials.json · Copilot ~/.copilot (OAuth)
+  • Copilot: each run uses one premium request on your subscription
   • Config: ~/.polish/config.json (tone, provider)
   • Updates: checked every 3 days; skip a version with N, or run polish update anytime
   • Disable auto-check: POLISH_SKIP_UPDATE_CHECK=1
