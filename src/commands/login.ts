@@ -9,6 +9,16 @@ import {
 } from "../config/provider.js";
 import { selectProvider } from "../util/select.js";
 
+async function waitForProviderAuth(provider: Provider): Promise<boolean> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (await hasProviderAuth(provider)) return true;
+    if (attempt < 4) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+  return false;
+}
+
 async function runProviderLogin(provider: Provider, device: boolean): Promise<number> {
   switch (provider) {
     case "chatgpt":

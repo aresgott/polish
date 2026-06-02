@@ -362,9 +362,32 @@ import { spawn as spawn3 } from "child_process";
 
 // src/auth/copilot-bin.ts
 import { execFileSync as execFileSync3 } from "child_process";
-import { createRequire as createRequire3 } from "module";
-import path3 from "path";
-var require4 = createRequire3(import.meta.url);
+import { arch as arch2 } from "os";
+import { fileURLToPath } from "url";
+var PACKAGE_PREFIX2 = "@github/copilot";
+var PLATFORMS2 = {
+  "darwin-arm64": `${PACKAGE_PREFIX2}-darwin-arm64`,
+  "darwin-x64": `${PACKAGE_PREFIX2}-darwin-x64`,
+  "linux-x64": `${PACKAGE_PREFIX2}-linux-x64`,
+  "linux-arm64": `${PACKAGE_PREFIX2}-linux-arm64`,
+  "linux-x64-musl": `${PACKAGE_PREFIX2}-linuxmusl-x64`,
+  "linux-arm64-musl": `${PACKAGE_PREFIX2}-linuxmusl-arm64`,
+  "win32-x64": `${PACKAGE_PREFIX2}-win32-x64`,
+  "win32-arm64": `${PACKAGE_PREFIX2}-win32-arm64`
+};
+function detectMusl2() {
+  if (process.platform !== "linux") return false;
+  const report = typeof process.report?.getReport === "function" ? process.report.getReport() : null;
+  return report != null && report.header?.glibcVersionRuntime === void 0;
+}
+function getPlatformKey2() {
+  const platform = process.platform;
+  const cpu = arch2();
+  if (platform === "linux" && detectMusl2()) {
+    return `${platform}-${cpu}-musl`;
+  }
+  return `${platform}-${cpu}`;
+}
 function findCopilotInPath() {
   try {
     const cmd = process.platform === "win32" ? "where" : "which";
@@ -374,17 +397,24 @@ function findCopilotInPath() {
     return null;
   }
 }
+function resolveBundledCopilotBin() {
+  const key = getPlatformKey2();
+  const pkg = key ? PLATFORMS2[key] : null;
+  if (!pkg) return null;
+  try {
+    return fileURLToPath(import.meta.resolve(pkg));
+  } catch {
+    return null;
+  }
+}
 function resolveCopilotBin() {
   const systemCopilot = findCopilotInPath();
   if (systemCopilot) return systemCopilot;
-  try {
-    const pkgJson = require4.resolve("@github/copilot/package.json");
-    return path3.join(path3.dirname(pkgJson), "npm-loader.js");
-  } catch {
-    throw new Error(
-      "GitHub Copilot CLI not found. Install it with: npm install -g @github/copilot"
-    );
-  }
+  const bundled = resolveBundledCopilotBin();
+  if (bundled) return bundled;
+  throw new Error(
+    "GitHub Copilot CLI not found. Install it with: npm install -g @github/copilot"
+  );
 }
 
 // src/auth/copilot-login.ts
@@ -392,7 +422,7 @@ async function runCopilotLogin() {
   const copilotBin = resolveCopilotBin();
   const filter = createLoginOutputFilter({ device: false });
   return new Promise((resolve, reject) => {
-    const child = spawn3(process.execPath, [copilotBin, "login"], {
+    const child = spawn3(copilotBin, ["login"], {
       stdio: ["inherit", "pipe", "pipe"],
       env: process.env
     });
@@ -499,6 +529,30 @@ async function hasCodexAuth() {
   }
 }
 
+// src/auth/copilot-config.ts
+import { readFile as readFile3 } from "fs/promises";
+import { homedir as homedir4 } from "os";
+import { join as join4 } from "path";
+function getCopilotHome() {
+  return process.env.COPILOT_HOME ?? join4(homedir4(), ".copilot");
+}
+function getCopilotConfigPath() {
+  return join4(getCopilotHome(), "config.json");
+}
+function parseCopilotConfig(raw) {
+  const withoutComments = raw.replace(/^\s*\/\/.*$/gm, "");
+  return JSON.parse(withoutComments);
+}
+async function hasCopilotStoredLogin() {
+  try {
+    const raw = await readFile3(getCopilotConfigPath(), "utf8");
+    const config = parseCopilotConfig(raw);
+    return (config.loggedInUsers?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 // src/auth/copilot-env.ts
 var COPILOT_TOKEN_ENV_KEYS = [
   "COPILOT_GITHUB_TOKEN",
@@ -531,6 +585,7 @@ function createPolishCopilotClient() {
 async function withPolishCopilotClient(fn) {
   const client = createPolishCopilotClient();
   try {
+    await client.start();
     return await fn(client);
   } finally {
     await client.stop();
@@ -540,6 +595,7 @@ async function withPolishCopilotClient(fn) {
 // src/auth/copilot-auth.ts
 async function hasCopilotAuth() {
   if (hasCopilotEnvToken()) return true;
+  if (await hasCopilotStoredLogin()) return true;
   try {
     return await withPolishCopilotClient(async (client) => {
       const status = await client.getAuthStatus();
@@ -597,6 +653,15 @@ async function selectProvider() {
 }
 
 // src/commands/login.ts
+async function waitForProviderAuth(provider) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (await hasProviderAuth(provider)) return true;
+    if (attempt < 4) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+  return false;
+}
 async function runProviderLogin(provider, device) {
   switch (provider) {
     case "chatgpt":
@@ -1610,9 +1675,9 @@ async function loadUpdateState() {
   }
 }
 async function saveUpdateState(state) {
-  const path4 = getUpdateStatePath();
-  await mkdir2(join4(homedir4(), ".polish"), { recursive: true });
-  await writeFile2(path4, `${JSON.stringify(state, null, 2)}
+  const path3 = getUpdateStatePath();
+  await mkdir2(join5(homedir5(), ".polish"), { recursive: true });
+  await writeFile2(path3, `${JSON.stringify(state, null, 2)}
 `, { mode: 384 });
 }
 function isCheckDue(state, now = Date.now()) {
