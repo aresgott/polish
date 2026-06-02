@@ -530,7 +530,7 @@ async function hasCodexAuth() {
 }
 
 // src/auth/copilot-config.ts
-import { readFile as readFile3 } from "fs/promises";
+import { readFile as readFile3, writeFile as writeFile2 } from "fs/promises";
 import { homedir as homedir4 } from "os";
 import { join as join4 } from "path";
 function getCopilotHome() {
@@ -543,14 +543,29 @@ function parseCopilotConfig(raw) {
   const withoutComments = raw.replace(/^\s*\/\/.*$/gm, "");
   return JSON.parse(withoutComments);
 }
-async function hasCopilotStoredLogin() {
+async function readCopilotConfig() {
   try {
     const raw = await readFile3(getCopilotConfigPath(), "utf8");
-    const config = parseCopilotConfig(raw);
-    return (config.loggedInUsers?.length ?? 0) > 0;
+    return parseCopilotConfig(raw);
   } catch {
-    return false;
+    return null;
   }
+}
+async function hasCopilotStoredLogin() {
+  const config = await readCopilotConfig();
+  return (config?.loggedInUsers?.length ?? 0) > 0;
+}
+async function getCopilotLoggedInUsers() {
+  const config = await readCopilotConfig();
+  return config?.loggedInUsers ?? [];
+}
+async function clearCopilotStoredLogin() {
+  const config = await readCopilotConfig();
+  if (!config) return;
+  delete config.loggedInUsers;
+  delete config.lastLoggedInUser;
+  await writeFile2(getCopilotConfigPath(), `${JSON.stringify(config, null, 2)}
+`, "utf8");
 }
 
 // src/auth/copilot-env.ts
@@ -579,7 +594,12 @@ function hasCopilotEnvToken() {
 import { CopilotClient } from "@github/copilot-sdk";
 function createPolishCopilotClient() {
   return new CopilotClient({
-    logLevel: "error"
+    logLevel: "error",
+    // The bundled Copilot CLI uses node:sqlite for its session store, which
+    // emits a Node ExperimentalWarning. The SDK forwards the subprocess stderr
+    // verbatim (prefixed with "[CLI subprocess]"), so silence it at the source
+    // by disabling warnings in the spawned runtime's environment.
+    env: { ...process.env, NODE_NO_WARNINGS: "1" }
   });
 }
 async function withPolishCopilotClient(fn) {
@@ -766,41 +786,88 @@ async function runClaudeLogout() {
   });
 }
 
-// src/auth/copilot-logout.ts
-function getRpcConnection(client) {
-  const connection = client.connection;
-  return connection ?? null;
+// src/auth/copilot-credential.ts
+import { execFile as execFile2 } from "child_process";
+import { promisify as promisify2 } from "util";
+var execFileAsync2 = promisify2(execFile2);
+var COPILOT_CREDENTIAL_SERVICE = "copilot-cli";
+function copilotCredentialAccount(host, login) {
+  return `${host}:${login}`;
 }
+async function deleteCopilotCredential(account) {
+  try {
+    if (process.platform === "darwin") {
+      await execFileAsync2("security", [
+        "delete-generic-password",
+        "-s",
+        COPILOT_CREDENTIAL_SERVICE,
+        "-a",
+        account
+      ]);
+    } else if (process.platform === "win32") {
+      await execFileAsync2("cmdkey", [
+        `/delete:${COPILOT_CREDENTIAL_SERVICE}/${account}`
+      ]);
+    } else {
+      await execFileAsync2("secret-tool", [
+        "clear",
+        "service",
+        COPILOT_CREDENTIAL_SERVICE,
+        "account",
+        account
+      ]);
+    }
+  } catch {
+  }
+}
+
+// src/auth/copilot-logout.ts
 async function runCopilotLogout() {
-  return withPolishCopilotClient(async (client) => {
-    const status = await client.getAuthStatus();
-    if (!status.isAuthenticated) {
-      return 0;
-    }
-    if (status.authType === "env") {
-      console.error(
-        "\nSigned in via environment variable. Unset COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN."
-      );
-      return 1;
-    }
-    if (status.authType === "gh-cli") {
-      console.error("\nSigned in via GitHub CLI. Run: gh auth logout");
-      return 1;
-    }
-    const connection = getRpcConnection(client);
-    if (connection) {
-      try {
-        await connection.sendRequest("auth.logout", {});
-        const after = await client.getAuthStatus();
-        if (!after.isAuthenticated) return 0;
-      } catch {
-      }
-    }
+  const status = await withPolishCopilotClient((client) => client.getAuthStatus());
+  if (!status.isAuthenticated) {
+    return 0;
+  }
+  if (status.authType === "env") {
     console.error(
-      "\nCould not sign out automatically. In Copilot CLI, run /logout, or remove stored credentials under ~/.copilot."
+      "\nSigned in via environment variable. Unset COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN."
     );
     return 1;
-  });
+  }
+  if (status.authType === "gh-cli") {
+    console.error("\nSigned in via GitHub CLI. Run: gh auth logout");
+    return 1;
+  }
+  if (status.authType && status.authType !== "user") {
+    console.error(
+      `
+Signed in via ${status.authType}. Update that credential source to sign out.`
+    );
+    return 1;
+  }
+  const accounts = await collectCopilotAccounts(status.host, status.login);
+  for (const account of accounts) {
+    await deleteCopilotCredential(account);
+  }
+  await clearCopilotStoredLogin();
+  if (await hasCopilotAuth()) {
+    console.error(
+      "\nCould not fully sign out. Remove stored credentials under ~/.copilot, or run /logout inside the Copilot CLI."
+    );
+    return 1;
+  }
+  return 0;
+}
+async function collectCopilotAccounts(host, login) {
+  const accounts = /* @__PURE__ */ new Set();
+  if (host && login) {
+    accounts.add(copilotCredentialAccount(host, login));
+  }
+  for (const user of await getCopilotLoggedInUsers()) {
+    if (user.host && user.login) {
+      accounts.add(copilotCredentialAccount(user.host, user.login));
+    }
+  }
+  return [...accounts];
 }
 
 // src/commands/logout.ts
@@ -1556,8 +1623,8 @@ function getVersion() {
 }
 
 // src/update/install.ts
-import { execFile as execFile2, spawn as spawn6 } from "child_process";
-import { promisify as promisify2 } from "util";
+import { execFile as execFile3, spawn as spawn6 } from "child_process";
+import { promisify as promisify3 } from "util";
 
 // src/update/registry.ts
 var NPM_PACKAGE = "@aresgott/polish";
@@ -1612,14 +1679,14 @@ function isNewerVersion(latest, current) {
 }
 
 // src/update/install.ts
-var execFileAsync2 = promisify2(execFile2);
+var execFileAsync3 = promisify3(execFile3);
 async function detectInstallMethod() {
   const entry = process.argv[1] ?? "";
   if (entry.includes("/Cellar/polish/") || entry.includes("homebrew")) {
     return "homebrew";
   }
   try {
-    await execFileAsync2("brew", ["--prefix", "polish"]);
+    await execFileAsync3("brew", ["--prefix", "polish"]);
     return "homebrew";
   } catch {
     return "npm";
@@ -1661,7 +1728,7 @@ function manualUpdateHint(method) {
 }
 
 // src/update/state.ts
-import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile2 } from "fs/promises";
+import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir5 } from "os";
 import { join as join5 } from "path";
 var CHECK_INTERVAL_MS = 3 * 24 * 60 * 60 * 1e3;
@@ -1679,7 +1746,7 @@ async function loadUpdateState() {
 async function saveUpdateState(state) {
   const path3 = getUpdateStatePath();
   await mkdir2(join5(homedir5(), ".polish"), { recursive: true });
-  await writeFile2(path3, `${JSON.stringify(state, null, 2)}
+  await writeFile3(path3, `${JSON.stringify(state, null, 2)}
 `, { mode: 384 });
 }
 function isCheckDue(state, now = Date.now()) {
