@@ -5,6 +5,7 @@ import { resolveActiveProvider } from "../auth/provider-auth.js";
 import type { Provider } from "../config/provider.js";
 import { generateWithClaude } from "./generate-claude.js";
 import { generateWithCopilot } from "./generate-copilot.js";
+import { cleanModelOutput } from "./response-clean.js";
 
 const PREFERRED_MODELS = [
   "gpt-4o-mini",
@@ -42,7 +43,7 @@ export async function generateWithSystemPrompt(
         system,
         prompt: input,
       });
-      const text = result.text.trim();
+      const text = cleanModelOutput(result.text);
       if (text) return text;
     } catch (err) {
       lastError = err;

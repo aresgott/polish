@@ -1,6 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { getClaudeAccessToken } from "../auth/claude-auth.js";
+import { cleanModelOutput } from "./response-clean.js";
 
 function stripInjectedXml(text: string): string {
   return text
