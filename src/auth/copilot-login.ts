@@ -7,7 +7,7 @@ export async function runCopilotLogin(): Promise<number> {
   const filter = createLoginOutputFilter({ device: false });
 
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [copilotBin, "login"], {
+    const child = spawn(copilotBin, ["login"], {
       stdio: ["inherit", "pipe", "pipe"],
       env: process.env,
     });

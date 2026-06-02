@@ -11,6 +11,7 @@ export async function withPolishCopilotClient<T>(
 ): Promise<T> {
   const client = createPolishCopilotClient();
   try {
+    await client.start();
     return await fn(client);
   } finally {
     await client.stop();
